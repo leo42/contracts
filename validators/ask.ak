@@ -1,18 +1,11 @@
 use aiken/builtin.{blake2b_256, serialise_data}
 use aiken/bytearray
 use aiken/list
-use aiken/transaction.{
-  InlineDatum, Input, NoDatum, Output, OutputReference, ScriptContext, Spend,
-  Transaction, TransactionId,
-}
-use aiken/transaction/credential
-use aiken/transaction/value
-use crashr/constants.{marketplace_addr}
-use crashr/types.{Payout, VerificationKeyHash}
-use crashr/utils.{
-  calculate_marketplace_payout, check_marketplace_payout, check_payouts,
-  find_payout_outputs,
-}
+use aiken/transaction.{InlineDatum, NoDatum, ScriptContext, Spend, Transaction}
+use aiken/transaction/credential.{PaymentCredential }
+use jpg/constants
+use jpg/types.{Payout, VerificationKeyHash}
+use jpg/utils.{check_marketplace_payout, check_payouts, find_payout_outputs}
 
 /// A listing requires a datum that has
 /// the owner's payment key and a list of payouts.
@@ -25,7 +18,7 @@ type Datum {
   payouts: List<Payout>,
   /// Flexible to allow discounts
   /// The key that listed the NFT
-  owner: VerificationKeyHash,
+  owner: PaymentCredential,
 }
 
 /// A user can either buy a token
@@ -44,7 +37,7 @@ validator {
   fn spend(datum: Datum, redeemer: Redeemer, ctx: ScriptContext) -> Bool {
     let ScriptContext { transaction, purpose } = ctx
 
-    let Transaction { outputs, extra_signatories, .. } = transaction
+    let Transaction { outputs, extra_signatories, inputs, .. } = transaction
 
     // Match on the action.
     when redeemer is {
@@ -80,8 +73,11 @@ validator {
       // owner can cancel or update their listing
       // at any time.
       WithdrawOrUpdate ->
-        // is signed by owner
-        list.has(extra_signatories, datum.owner)
+        
+        or( // Owner is spending one of his UTxOs to prove authorization 
+            list.any(inputs, fn(input) { input.output.address.payment_credential == datum.owner }),
+            // is signed by owner 
+            list.has(extra_signatories, datum.owner))
     }
   }
 }
