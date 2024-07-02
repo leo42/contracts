@@ -35,9 +35,8 @@ validator {
   fn spend(datum: Datum, redeemer: Redeemer, ctx: ScriptContext) -> Bool {
     let ScriptContext { transaction, purpose } = ctx
 
-    let Transaction { outputs, inputs ,  .. } = transaction
+    let Transaction { outputs, extra_signatories, inputs, .. } = transaction
 
-    
     // Match on the action.
     when redeemer is {
       Buy { payout_outputs_offset } -> {
@@ -89,9 +88,16 @@ validator {
       // There's not much to do here. An asset
       // owner can cancel or update their listing
       // at any time.
-      WithdrawOrUpdate ->
+      WithdrawOrUpdate -> {
         // is signed by owner
-        list.any(inputs, fn(input) { input.output.address.payment_credential == datum.owner })
+        let has_owner_signature = list.has(extra_signatories, datum.owner)
+        let has_owner_input =
+          list.any(
+            inputs,
+            fn(input) { input.output.address.payment_credential == datum.owner },
+          )
+        has_owner_signature || has_owner_input
       }
+    }
   }
 }
